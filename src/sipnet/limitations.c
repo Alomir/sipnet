@@ -6,24 +6,17 @@
 #include "common/logging.h"
 #include "common/util.h"
 
-#include "events.h"
 #include "nitrogen.h"
 #include "state.h"
 
 // See limitations.h
-void checkLeafOnLimitation(double *leafOnFlux) {
+void checkLeafOnLimitation(double *leafOnCDemand) {
   // Leaf on events are limited by:
   // * leafGrowth parameter (input leafOn value)
   // * available carbon
   // * available nitrogen
 
-  // Make sure to include current leaf on flux, in case there is more than
-  // one leaf on event
-  double currentFlux = fluxes.leafOnCreation + fluxes.eventLeafOnCreation;
-  double totalDemandFlux = *leafOnFlux + currentFlux;
-  double leafOnCDemand = totalDemandFlux * climate->length;
-
-  if (leafOnCDemand < TINY) {
+  if (*leafOnCDemand < TINY) {
     // Nothing to check
     return;
   }
@@ -31,7 +24,7 @@ void checkLeafOnLimitation(double *leafOnFlux) {
   // First up, carbon. We do not draw from the C storage pool for this.
   double availableC =
       (envi.plantWoodC + envi.coarseRootC) * params.leafOnReallocFrac;
-  double cLimiter = availableC / leafOnCDemand;
+  double cLimiter = availableC / *leafOnCDemand;
 
   double leafOnNDemand = 0.0;
   double nLimiter = 1.0;
@@ -41,7 +34,7 @@ void checkLeafOnLimitation(double *leafOnFlux) {
     // Needed N for this transfer is (what leaves need) - (what wood provides)
     // Reminder: both wood and coarseRoot use params.woodCN, so no need to
     // treat those C demands separately
-    leafOnNDemand = calcLeafOnNFromC(leafOnCDemand);
+    leafOnNDemand = calcLeafOnNFromC(*leafOnCDemand);
     availableN = envi.plantStorageN;
     if (leafOnNDemand > TINY) {
       nLimiter = availableN / leafOnNDemand;
@@ -50,20 +43,19 @@ void checkLeafOnLimitation(double *leafOnFlux) {
   double limitation = unitClip(fmin(cLimiter, nLimiter));
 
   if (limitation < 1) {
-    totalDemandFlux *= limitation;
-    *leafOnFlux = totalDemandFlux - currentFlux;
+    *leafOnCDemand *= limitation;
     if (ctx.nitrogenCycle) {
       logInfo("Leaf on creation %.4f C / %.4f N exceeds available C %.4f / N "
               "%.4f (C ratio: %.4f, N ratio: %.4f), "
               "reducing leaf-on growth by %.2f%% on year %d day %d time %.3f\n",
-              leafOnCDemand, leafOnNDemand, availableC, availableN, cLimiter,
+              *leafOnCDemand, leafOnNDemand, availableC, availableN, cLimiter,
               nLimiter, (1 - limitation) * 100, climate->year, climate->day,
               climate->time);
     } else {
       logInfo("Leaf on creation %.4f exceeds available C %.4f "
               "(C ratio: %.4f, N ratio: %.4f), "
               "reducing leaf-on growth by %.2f%% on year %d day %d time %.3f\n",
-              leafOnCDemand, availableC, cLimiter, nLimiter,
+              *leafOnCDemand, availableC, cLimiter, nLimiter,
               (1 - limitation) * 100, climate->year, climate->day,
               climate->time);
     }
@@ -95,45 +87,8 @@ static void checkNegativeCreation(void) {
 
   // Reminder: litter and creation fluxes "point" in the opposite direction, so
   // their signs are opposite here
-  double deficit = fluxes.leafOffLitter + fluxes.eventLeafOffLitterC -
-                   fluxes.leafCreation - fluxes.eventLeafC - availableLeafRate;
-  double adjust;
-  if (deficit > 0 && fluxes.eventLeafOffLitterC > 0) {
-    // If negative growth + leaf off is too much, let's first reduce leaf off
-    adjust = fmin(fluxes.eventLeafOffLitterC, deficit);
-    fluxes.eventLeafOffLitterC -= adjust;
-    deficit -= adjust;
-  }
-  // Try the other leaf off litter (only one of these at most will be > 0)
-  if (deficit > 0 && fluxes.leafOffLitter > 0) {
-    adjust = fmin(fluxes.leafOffLitter, deficit);
-    fluxes.leafOffLitter -= adjust;
-    deficit -= adjust;
-  }
-  // Next, check to see if a harvest might have overdrawn
-  if (deficit > 0 && fluxes.eventLeafC < 0) {
-    // Negative eventLeafC is removal; need it to be "less", i.e. closer to 0
-    adjust = fmin(-fluxes.eventLeafC, deficit);
-    fluxes.eventLeafC += adjust;
-    HarvestTrackers *ht = &eventTrackers.harvestTrackers;
-    ht->leafCAdjustment = adjust;
-
-    // Figure out where it should come from; note totalFrac will be greater
-    // than zero here
-    double litterAdjust, outAdjust;
-    partitionLeafAdjustment(adjust, &litterAdjust, &outAdjust);
-
-    fluxes.eventOutputC -= outAdjust;
-    if (ctx.litterPool) {
-      fluxes.harvestLitterC -= litterAdjust;
-    } else {
-      fluxes.eventSoilC -= litterAdjust;
-    }
-
-    // Update the deficit
-    deficit -= adjust;
-  }
-  // Last, move some negative growth to the wood pool
+  double deficit = fluxes.leafCreation - fluxes.eventLeafC - availableLeafRate;
+  // Move some negative growth to the wood pool
   if (deficit > 0) {
     // If this is too much for the wood pool to handle, we have an error that
     // will be caught in ensureNonNegative
@@ -205,7 +160,7 @@ static void checkNitrogenLimitation(void) {
     //   upD = (kD - S) * u = N
     // Solving for k:
     //   k = [N/u + S] / D
-    double unclaimedStorage = calcUnclaimedStorageN();
+    double unclaimedStorage = envi.plantStorageN;
     double demand = calcPlantNDemandFlux() * len;
     double uptakeFrac = 1 - calcNFixationFrac();
     double reduction = (availableMinN / uptakeFrac + unclaimedStorage) / demand;
@@ -222,29 +177,6 @@ static void checkNitrogenLimitation(void) {
     fluxes.leafCreation *= reduction;
     fluxes.fineRootCreation *= reduction;
     fluxes.coarseRootCreation *= reduction;
-
-    // If there was a leaf-off event in this step, it is possible that we have
-    // reduced leaf growth down to the point where the pool will go negative
-    // Re-call that check
-    // First, reset this tracker so we know if eventLeafC is changed
-    HarvestTrackers *ht = &eventTrackers.harvestTrackers;
-    ht->leafCAdjustment = 0.0;
-    checkNegativeCreation();
-    if (ht->leafCAdjustment > 0.0) {
-      double litterFlux, outputFlux;
-      partitionLeafAdjustment(ht->leafCAdjustment, &litterFlux, &outputFlux);
-      fluxes.eventLitterN -= litterFlux / params.leafCN;
-      fluxes.eventOutputN -= outputFlux / params.leafCN;
-    }
-
-    // Reset and recalc event leaf-off N
-    // Nitrogen for "calculated" leaf-off events will be redone in
-    // calcNitrogenFluxes below
-    fluxes.eventLeafOffNResorption = 0.0;
-    fluxes.eventLeafOffLitterN = 0.0;
-    calcLeafOffNEffects(fluxes.eventLeafOffLitterC * len,
-                        &fluxes.eventLeafOffNResorption,
-                        &fluxes.eventLeafOffLitterN);
 
     // Reset N calculations
     calcNitrogenFluxes();

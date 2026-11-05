@@ -795,7 +795,6 @@ void calcWoodAndLeafFluxes(void) {
 void calcLeafOnOffFluxes(void) {
   // Calc additional fluxes at start/end of growing season
   // Note that these are basically events, and we will track them as such
-  double len = climate->length;
 
   // first check for new year; if new year, reset trackers (since we haven't
   // done leaf growth or fall yet in this new year):
@@ -808,23 +807,16 @@ void calcLeafOnOffFluxes(void) {
   // check for start of growing season:
   if (!phenologyTrackers.didLeafGrowth && pastLeafGrowth()) {
     // we just reached the start of the growing season
-    double leafOn = params.leafGrowth / len;
-    double leafOnFromWood = 0;
-    checkLeafOnLimitation(&leafOn);
-    fluxes.leafOnCreation += leafOn;
-    double totalSourceC = envi.plantWoodC + envi.coarseRootC;
-    if (totalSourceC > TINY) {
-      leafOnFromWood = leafOn * envi.plantWoodC / totalSourceC;
-      fluxes.leafOnCreationFromWood += leafOnFromWood;
-    }
+    // register this for handling as an event
+    eventTrackers.totalLeafOnAmount += params.leafGrowth;
     phenologyTrackers.didLeafGrowth = 1;
   }
 
   // check for end of growing season:
   if (!phenologyTrackers.didLeafFall && pastLeafFall()) {
     // we just reached the end of the growing season
-    double leafOff = (envi.plantLeafC * params.fracLeafFall) / len;
-    fluxes.leafOffLitter += leafOff;
+    // register this for handling as an event
+    eventTrackers.totalLeafOffFraction += params.fracLeafFall;
     phenologyTrackers.didLeafFall = 1;
   }
 }
@@ -1456,10 +1448,6 @@ void updateTrackers(double oldSoilWater) {
   trackers.soilWetnessFrac =
       (oldSoilWater + envi.soilWater) / (2.0 * params.soilWHC);
 
-  // If we get another event flux in this function, we should create an
-  // updateTrackersForEvents() function in events.c|h
-  trackers.yearlyLitter += getLeafLitterFlux() + fluxes.eventLeafOffLitterC;
-
   if (ctx.gdd) {
     trackers.gdd += climate->gdd;
   } else {
@@ -1587,17 +1575,15 @@ void updateMainPools(void) {
                           fluxes.fineRootCreation + fluxes.coarseRootCreation;
   envi.plantCAccountingDelta +=
       ((fluxes.photosynthesis - r_a) - nppAllocations) * climate->length;
-  envi.plantWoodC += (fluxes.woodCreation - fluxes.woodLitter -
-                      fluxes.leafOnCreationFromWood) *
-                     climate->length;
+  envi.plantWoodC +=
+      (fluxes.woodCreation - fluxes.woodLitter) * climate->length;
 
   // :: from [1], eq (A2), where:
   //     L   = fluxes.leafCreation
   //     L_L = fluxes.leafLitter
   // Note: we have split leafCreation into two parts
   envi.plantLeafC +=
-      (fluxes.leafCreation + fluxes.leafOnCreation - getLeafLitterFlux()) *
-      climate->length;
+      (fluxes.leafCreation + -fluxes.leafLitter) * climate->length;
 
   // :: from [1], eq (A4), where:
   //     P = (fluxes.rain - fluxes.immedEvap)
@@ -1637,8 +1623,8 @@ void updatePoolsForSoil(void) {
         ctx.carbonSaturation ? unitClip(envi.soilC / params.soilCSaturation)
                              : 0.0;
     // :: from [2], litter model description
-    envi.litterC += (fluxes.woodLitter + getLeafLitterFlux() +
-                     (soilInputs * saturationFraction) - fluxes.litterToSoil -
+    envi.litterC += (fluxes.woodLitter + fluxes.leafLitter +
+                     soilInputs * saturationFraction - fluxes.litterToSoil -
                      fluxes.rLitter - fluxes.litterMethane) *
                     climate->length;
     // from [2] and [3], litter and root terms respectively
@@ -1654,18 +1640,15 @@ void updatePoolsForSoil(void) {
     // :: from [3], root terms
     envi.soilC +=
         (fluxes.coarseRootLoss + fluxes.fineRootLoss + fluxes.woodLitter +
-         getLeafLitterFlux() - fluxes.rSoil - fluxes.soilMethane) *
+         fluxes.leafLitter - fluxes.rSoil - fluxes.soilMethane) *
         climate->length;
   }
 
   // :: from [3], root model description, except that we deal with
   //    respiration in the woodC calculations (or, put another way, it's
   //    implicit in the creation term)
-  double leafOnCreationFromRoot =
-      fluxes.leafOnCreation - fluxes.leafOnCreationFromWood;
-  envi.coarseRootC += (fluxes.coarseRootCreation - fluxes.coarseRootLoss -
-                       leafOnCreationFromRoot) *
-                      climate->length;
+  envi.coarseRootC +=
+      (fluxes.coarseRootCreation - fluxes.coarseRootLoss) * climate->length;
   envi.fineRootC +=
       (fluxes.fineRootCreation - fluxes.fineRootLoss) * climate->length;
 }
@@ -1845,7 +1828,13 @@ void updateState(void) {
   updatePoolsAndBalance();
 
   ///////////////////////
-  // 3. Update trackers
+  // 3. Process Pending Events
+
+  // Harvest and leaf on/off events have their own handling
+  processPendingEvents();
+
+  ///////////////////////
+  // 4. Update trackers
 
   updateTrackers(oldSoilWater);
 

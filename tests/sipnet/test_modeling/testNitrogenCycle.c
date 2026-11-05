@@ -557,7 +557,7 @@ int testOrganicNWithResorption(void) {
   //   litterToSoil/litterCN
   //              = 1 - 0.5 + 1 - 1 - 1 = -0.5
   initOrganicNState(2.0, 3.0);
-  fluxes.leafOffNResorption = 0.5;
+  fluxes.leafNResorption = 0.5;
 
   calcNPoolFluxes();
 
@@ -749,7 +749,7 @@ int testLeafTurnoverNResorption(void) {
   resetState();
   envi.minN = 1.0;
   envi.plantStorageN = 0.0;
-  fluxes.leafOffNResorption = 2.0;
+  fluxes.leafNResorption = 2.0;
   params.leafNResorptionFrac = 0.5;
 
   updateNitrogenPools();
@@ -775,7 +775,7 @@ int testLeafTurnoverNResorption(void) {
   envi.plantLeafC = 8.0;
 
   initNLimitationState(minN2, 0);
-  fluxes.leafOffNResorption = resorpFlux;
+  fluxes.leafNResorption = resorpFlux;
   // to make sure leafOffNResorption is not reduced by leafOffLitter
   fluxes.leafOffLitter =
       resorpFlux * params.leafCN / params.leafNResorptionFrac;
