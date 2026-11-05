@@ -795,7 +795,6 @@ void calcWoodAndLeafFluxes(void) {
 void calcLeafOnOffFluxes(void) {
   // Calc additional fluxes at start/end of growing season
   // Note that these are basically events, and we will track them as such
-  double len = climate->length;
 
   // first check for new year; if new year, reset trackers (since we haven't
   // done leaf growth or fall yet in this new year):

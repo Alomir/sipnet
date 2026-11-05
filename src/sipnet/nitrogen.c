@@ -70,7 +70,7 @@ static void calcNPoolFluxes(void) {
   // litter (modified by leaf N resorption), and N loss due to mineralization.
   // N added via fertilization is handled elsewhere.
   fluxes.nOrgLitter = fluxes.leafLitter / params.leafCN -
-                      fluxes.leafOffNResorption +
+                      fluxes.leafNResorption +
                       fluxes.woodLitter / params.woodCN - litterMin -
                       litterNToSoil + (soilNInputs * saturationFraction);
 
@@ -117,7 +117,7 @@ double calcPlantAvailableN(void) {
   // step is ok). This is used in the determination of N limitation.
   // Note, though, that we can't really use the incoming N to plantStorageN,
   // as that is not immediately available to offset minN loss.
-  double unclaimedStorage = calcUnclaimedStorageN();
+  double unclaimedStorage = envi.plantStorageN;
   double nonUptakeDelta = calcMinNNonUptakeFluxes() * climate->length;
   return fmax(0.0, envi.minN + unclaimedStorage + nonUptakeDelta);
 }
@@ -125,16 +125,6 @@ double calcPlantAvailableN(void) {
 // see nitrogen.h
 double calcMinNNonUptakeFluxes(void) {
   return fluxes.nMin - fluxes.nVolatilization - fluxes.nLeaching;
-}
-
-// see nitrogen.h
-double calcUnclaimedStorageN(void) {
-  double leafOnCFlux = fluxes.leafOnCreation + fluxes.eventLeafOnCreation;
-  double leafOnNFlux = calcLeafOnNFromC(leafOnCFlux);
-  double unclaimedStorage = envi.plantStorageN - leafOnNFlux * climate->length;
-  // The fmax here should be unnecessary, as the leaf-on demand has been capped
-  // by the storage pool - but we'll cover our bases anyway
-  return fmax(0.0, unclaimedStorage);
 }
 
 // see nitrogen.h
@@ -189,7 +179,7 @@ void calcNResorptionFluxes(void) {
   }
 
   // Leaf litter resorption
-  fluxes.leafOffNResorption =
+  fluxes.leafNResorption =
       params.leafNResorptionFrac * fluxes.leafLitter / params.leafCN;
 
   // TODO: [consider] Should we resorb N from wood litter?
@@ -238,10 +228,9 @@ void updateNitrogenPools(void) {
 void calcLeafOffNEffects(double leafOffC, double *resorptionAmount,
                          double *litterAmount) {
   // TODO: move to processPendingEvents?
-  double climLen = climate->length;
   double leafN = leafOffC / params.leafCN;
   double leafNResorption = leafN * params.leafNResorptionFrac;
   double litterNAdd = leafN - leafNResorption;
-  *resorptionAmount += leafNResorption / climLen;
-  *litterAmount += litterNAdd / climLen;
+  *resorptionAmount += leafNResorption;
+  *litterAmount += litterNAdd;
 }

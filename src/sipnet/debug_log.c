@@ -130,7 +130,7 @@ void initDebugArrays() {
   debugFields->fluxDF[ind++] = (DebugField){"nMin", DEBUG_FIELD_DOUBLE, &fluxes.nMin},
   debugFields->fluxDF[ind++] = (DebugField){"nFixation", DEBUG_FIELD_DOUBLE, &fluxes.nFixation},
   debugFields->fluxDF[ind++] = (DebugField){"nUptake", DEBUG_FIELD_DOUBLE, &fluxes.nUptake},
-  debugFields->fluxDF[ind++] = (DebugField){"leafOffNResorption", DEBUG_FIELD_DOUBLE, &fluxes.leafOffNResorption},
+  debugFields->fluxDF[ind++] = (DebugField){"leafOffNResorption", DEBUG_FIELD_DOUBLE, &fluxes.leafNResorption},
   debugFields->fluxDF[ind++] = (DebugField){"reductionNResorption", DEBUG_FIELD_DOUBLE, &fluxes.reductionNResorption},
   debugFields->fluxDF[ind++] = (DebugField){"eventLeafC", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafC},
   debugFields->fluxDF[ind++] = (DebugField){"eventWoodC", DEBUG_FIELD_DOUBLE, &fluxes.eventWoodC},

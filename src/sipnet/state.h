@@ -552,7 +552,7 @@ typedef struct FluxVars {
   // double leafOnCreationFromWood; TODO: remove
   // leaf fall from calculated leaf off 'events' (gdd, soil temp, day of year)
   // (g C * m^-2 grount area * day^-1)
-  double leafOffLitter;
+  //double leafOffLitter; TODO: remove
 
   // ****************************************
   // Fluxes for nitrogen cycle
@@ -583,8 +583,8 @@ typedef struct FluxVars {
   // g N * m^-2 ground area * day^-1
   double nUptake;
 
-  // Plant N stored in a leaf-off event
-  double leafOffNResorption;
+  // Plant N resorbed from leaf turnover
+  double leafNResorption;
 
   // Plant N stored when mean NPP is < 0
   double reductionNResorption;
@@ -645,11 +645,11 @@ typedef struct FluxVars {
   // coarse root C)
   double eventLeafOnCreationFromWood;
   // Transfer from leafC to soil/litter from a leaf-off event
-  double eventLeafOffLitterC;
+  //double eventLeafOffLitterC; TODO: remove
   // Transfer from leafN to soil/litter from a leaf-off event
-  double eventLeafOffLitterN;
+  //double eventLeafOffLitterN; TODO: remove
   // Resorption of leaf N from a leaf-off event
-  double eventLeafOffNResorption;
+  //double eventLeafOffNResorption; TODO: remove
 
   // ****************************************
   // Methane production
@@ -683,9 +683,9 @@ typedef struct PendingEventVars {
   double harvestOutputN;
 
   // leaf off
-  double leafOffC;
+  double leafOffCTransfer;
   double leafOffNResorption;
-  double leafOffLitterN;
+  double leafOffNTransfer;
 } PendingEvents;
 
 extern PendingEvents pendingEvents;
