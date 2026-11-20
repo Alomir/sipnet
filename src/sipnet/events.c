@@ -36,8 +36,8 @@ static EventNode *gEvent = NULL;
 // events.out handle, only needed here
 static FILE *eventOutFile = NULL;
 
-static EventNode *createEventNode(int year, int day, int eventType,
-                                  const char *eventParamsStr) {
+EventNode *createEventNode(int year, int day, int eventType,
+                           const char *eventParamsStr) {
   static int nitrogenWarned = 0;
   EventNode *newEvent = (EventNode *)malloc(sizeof(EventNode));
   newEvent->year = year;
@@ -105,12 +105,9 @@ static EventNode *createEventNode(int year, int day, int eventType,
                  day);
         exit(EXIT_CODE_INPUT_FILE_ERROR);
       }
-      // scanf(eventParamsStr, "%lf %lf %lf %lf", &org_N, &org_C, &min_N,
-      // &nh4_no3_frac);
       fParams->orgN = orgN;
       fParams->orgC = orgC;
       fParams->minN = minN;
-      // params->nh4_no3_frac = nh4_nos_frac;
       newEvent->eventParams = fParams;
 
       if (!ctx.nitrogenCycle && (orgN > 0.0 || minN > 0.0) && !nitrogenWarned) {
@@ -175,11 +172,20 @@ static EventNode *createEventNode(int year, int day, int eventType,
       newEvent->eventParams = lParams;
     } break;
     case PLANTDEATH: {
-      logError("PLANTDEATH event found for year %d day %d, but not implemented "
-               "as an input event; please remove and re-run\n",
-               year, day);
-      exit(EXIT_CODE_INPUT_FILE_ERROR);
-    }  // break;
+      // This should only be called internally, we don't support PLANTDEATH
+      // events in events.in
+      double dummy;
+      PlantDeathParams *pdParams = (PlantDeathParams *)malloc(sizeof(PlantDeathParams));
+      // Check for extraneous data: leafoff takes no parameters, so error if
+      // any numbers are found. sscanf returns 0 or EOF (-1) for empty input.
+      int numRead = sscanf(eventParamsStr,  // NOLINT
+                           "%lf", &dummy);
+      if (numRead > NUM_PLANTDEATH_PARAMS) {
+        logError("parsing PlantDeath params for year %d day %d\n", year, day);
+        exit(EXIT_CODE_INPUT_FILE_ERROR);
+      }
+      newEvent->eventParams = pdParams;
+    } break;
     default:
       // Unknown type, error and exit
       logError("found unknown event type %d while reading event file\n",
@@ -265,17 +271,10 @@ struct EventValidation {
 static struct EventValidation eVal = {0};
 
 void validateEvent(EventNode *event, int currYear, int currDay) {
-  // logInfo("Validating event with type %s\n", eventTypeToString(event->type));
   // If we have a leaf event, make sure we aren't also looking for
   // calculated leaf events.
   if (event->type == LEAFOFF || event->type == LEAFON) {
-    // logInfo("-->hasCheckedLeafEvents: %d\n", eVal.hasCheckedLeafEvents);
     if (!eVal.hasCheckedLeafEvents) {
-
-      // logInfo("-->if test: %d\n",
-      // ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 ||
-      //   params.leafOffDay > 0);
-
       if (ctx.gdd || ctx.soilPhenol || params.leafOnDay > 0 ||
           params.leafOffDay > 0) {
         logError("calculated leaf events (via leafOnDay/leafOffDay params or "
@@ -302,6 +301,14 @@ void validateEvent(EventNode *event, int currYear, int currDay) {
   if (eVal.todayHasHarvest && eVal.todayHasPlanting) {
     logError("reading event file: planting and harvest events cannot occur "
              "on the same day (%d, %d)\n",
+             event->year, event->day);
+    exit(EXIT_CODE_INPUT_FILE_ERROR);
+  }
+
+  // Check PLANTDEATH here, as createEventNode needs to allow it
+  if (event->type == PLANTDEATH) {
+    logError("PLANTDEATH event found for year %d day %d, but PLANTDEATH not "
+             "supported as input event; please remove and re-run\n",
              event->year, event->day);
     exit(EXIT_CODE_INPUT_FILE_ERROR);
   }
@@ -470,6 +477,32 @@ void logPendingHarvestEvent(EventNode *event) {
   // clang-format on
 }
 
+void writeEvent(EventNode *event) {
+  // Change last char to a newline if it is a comma
+  // Get the current length of the string
+  char *log = event->logLine->buffer;
+  size_t len = strlen(log);
+  if (len > 0 && log[len - 1] == ',') {
+    log[len - 1] = '\n';
+  } else {
+    dsAppend(event->logLine, "\n");
+  }
+  fprintf(eventOutFile, "%4d  %3d  %-7s  %s", event->year, event->day,
+          eventTypeToString(event->type), log);
+}
+
+void freeEvent(EventNode *event) {
+  if (event == NULL) {return;}
+
+  if (event->eventParams != NULL) {
+    free(event->eventParams);
+  }
+  if (event->logLine != NULL) {
+    dsFree(event->logLine);
+  }
+  free(event);
+}
+
 void writeEventsOut(void) {
   // We move the global events pointer here (instead of a copy as in the
   // processEvents functions), as this is the last pass
@@ -508,43 +541,51 @@ void writeEventsOut(void) {
       hasSeenLeafOff = 1;
     }
 
-    // Change last char to a newline if it is a comma
-    // Get the current length of the string
-    char *log = gEvent->logLine->buffer;
-    size_t len = strlen(log);
-    if (len > 0 && log[len - 1] == ',') {
-      log[len - 1] = '\n';
-    } else {
-      dsAppend(gEvent->logLine, "\n");
-    }
-    fprintf(eventOutFile, "%4d  %3d  %-7s  %s", gEvent->year, gEvent->day,
-            eventTypeToString(gEvent->type), log);
+    writeEvent(gEvent);
     gEvent = gEvent->nextEvent;
   }
 
   // Last, check for calculated leaf on/off "events"
   if (!hasSeenLeafOn && eventTrackers.totalLeafOnAmount > 0) {
+    EventNode *event = createEventNode(climYear, climDay, LEAFON, "");
     // clang-format off
-    writeComputedEventOut(
-      climate->year, climate->day, eventTypeToString(LEAFON), 2,
-      "leafOnCreation", pendingEvents.leafOnCreation,
-      "leafOnCreationFromWood", pendingEvents.leafOnCreationFromWood);
+    appendLog(event, 2,
+    "leafOnCreation", pendingEvents.leafOnCreation,
+    "leafOnCreationFromWood", pendingEvents.leafOnCreationFromWood);
     // clang-format on
+    writeEvent(event);
+    freeEvent(event);
   }
   if (!hasSeenLeafOff && eventTrackers.totalLeafOffFraction > 0) {
-    if (!ctx.nitrogenCycle) {
+    EventNode *event = createEventNode(climYear, climDay, LEAFOFF, "");
+    // clang-format off
+    appendLog(event, 1,
+      "leafOffCTransfer", pendingEvents.leafOffCTransfer);
+    // clang-format on
+    if (ctx.nitrogenCycle) {
       // clang-format off
-      writeComputedEventOut(
-        climate->year, climate->day, eventTypeToString(LEAFOFF), 1,
-        "leafOffCTransfer", pendingEvents.leafOffCTransfer);
+      appendLog(event, 2,
+                "leafOffNResorption", pendingEvents.leafOffNResorption,
+                "leafOffNTransfer", pendingEvents.leafOffNTransfer);
       // clang-format on
-    } else {
-      writeComputedEventOut(
-        climate->year, climate->day, eventTypeToString(LEAFOFF), 3,
-        "leafOffCTransfer", pendingEvents.leafOffCTransfer,
-        "leafOffNResorption", pendingEvents.leafOffNResorption,
-        "leafOffNTransfer", pendingEvents.leafOffNTransfer);
     }
+    writeEvent(event);
+    freeEvent(event);
+  }
+  // Plant death; no need for a "hasSeenPlantDeath" here, as there won't be any
+  // of this event from events.in
+  if (eventTrackers.plantDeathOccurred) {
+    EventNode *event = createEventNode(climYear, climDay, PLANTDEATH, "");
+    HarvestTrackers *ht = &eventTrackers.harvestTrackers;
+    // clang-format off
+    appendLog(event, 4,
+      "harvestFracRemoved", ht->totalFracRemoved,
+      "harvestFracTransferred", ht->totalFracTransferred,
+      "totalWoodC", eventTrackers.totalWoodC,
+      "totalRootC", eventTrackers.totalRootC);
+    // clang-format on
+    writeEvent(event);
+    freeEvent(event);
   }
 }
 
@@ -813,10 +854,8 @@ void processEventsForCarbon(EventNode *event) {
 
       } break;
       case PLANTDEATH: {
-        // There should be no way to get here, but covering our bases...
-        logWarning("PLANTDEATH event found for year %d day %d, but not "
-                   "implemented as an input event; ignoring\n",
-                   event->year, event->day);
+        logError("PLANTDEATH events are not supported as input events\n");
+        exit(EXIT_CODE_INPUT_FILE_ERROR);
       } break;
       default:
         logError("Unknown event type (%d) in processEvents()\n", event->type);
@@ -1087,19 +1126,11 @@ void updatePoolsForEvents(void) {
 }
 
 void freeEventList(void) {
-  EventNode *curr, *prev;
-
-  curr = gEvents;
+  EventNode *curr = gEvents;
   while (curr != NULL) {
-    prev = curr;
+    EventNode *prev = curr;
     curr = curr->nextEvent;
-    if (prev->eventParams != NULL) {
-      free(prev->eventParams);
-    }
-    if (prev->logLine != NULL) {
-      dsFree(prev->logLine);
-    }
-    free(prev);
+    freeEvent(prev);
   }
 }
 
@@ -1177,20 +1208,5 @@ void printEvent(EventNode *oneEvent) {
       break;
     default:
       printf("ERROR printing oneEvent: unknown type %d\n", oneEvent->type);
-  }
-}
-
-void partitionLeafAdjustment(double leafAdjust, double *litterAdjust,
-                             double *outputAdjust) {
-  const HarvestTrackers *ht = &eventTrackers.harvestTrackers;
-  double fracRemovedAbove = ht->totalFracRemovedAbove;
-  double fracTransferredAbove = ht->totalFracTransferredAbove;
-  double totalFrac = fracRemovedAbove + fracTransferredAbove;
-  if (totalFrac > 0.0) {
-    *litterAdjust = leafAdjust * fracTransferredAbove / totalFrac;
-    *outputAdjust = leafAdjust * fracRemovedAbove / totalFrac;
-  } else {
-    *litterAdjust = 0.0;
-    *outputAdjust = 0.0;
   }
 }

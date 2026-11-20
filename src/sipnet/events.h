@@ -247,9 +247,32 @@ typedef struct EventTrackerStruct {
 
   // Fraction removed and transferred from harvest events this time step
   HarvestTrackers harvestTrackers;
+
+  // Plant death from mortality check
+  int plantDeathOccurred;
+  // These two params are recorded since they are the pool checks for mortality;
+  // we will also use totalFracRemoved and totalFracTransferred from the
+  // harvestTracker
+  double totalWoodC;
+  double totalRootC;
 } EventTrackers;
 
 extern EventTrackers eventTrackers;
+
+// TODO: replace pending events with this;
+// - capture first leaf/harvest event here
+// - log into this event
+// - no need to track pendingEvent vars
+// BUT, STILL WANT FOR DEBUG/TESTING?? Grr
+// Hmm, still useful to simplify logging these events, including calc'd leaf?
+// With either this or just DynamicStrings, need to be careful about alloc/free
+// typedef struct PendingEventsStruct {
+//   EventNode *leafOnEvent;
+//   EventNode *leafOffEvent;
+//   EventNode *harvestEvent;
+// } PendingEvents;
+// Now that we have plant death adding in here, I think we are better off just
+// sticking with the pending events approach
 
 /*!
  * Initialize EventTrackers struct for tracking lingering event effects
@@ -260,18 +283,5 @@ void initEventTrackers(void);
  * Perform any needed updates post fluxes-and-pools updates
  */
 void updateEventTrackers(void);
-
-/*!
- * Limitation checks need to split an adjustment between litter and output
- *
- * Limitation checks may calculate a leaf adjustment that needs to be balanced
- * by changes to litter and output. Based on total harvest fractions, split the
- * leaf adjustment between litter and output fluxes.
- * @param litterAdjust
- * @param outputAdjust
- * @param leafAdjust
- */
-void partitionLeafAdjustment(double leafAdjust, double *litterAdjust,
-                             double *outputAdjust);
 
 #endif  // EVENTS_H

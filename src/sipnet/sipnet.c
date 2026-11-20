@@ -1729,11 +1729,13 @@ void checkForMortality(void) {
     resetMeanTracker(meanNPP, 0.0);
 
     if (ctx.events) {
-      writeComputedEventOut(climate->year, climate->day,
-                            eventTypeToString(PLANTDEATH), 4,
-                            "harvestFracRemoved", ht->totalFracRemoved,
-                            "harvestFracTransferred", ht->totalFracTransferred,
-                            "totalWoodC", totalWoodC, "totalRootC", totalRootC);
+      eventTrackers.totalWoodC = totalWoodC;
+      eventTrackers.totalRootC = totalRootC;
+
+      EventNode *event = createEventNode(climate->year, climate->day,
+                            PLANTDEATH, "");
+      writeEvent(event);
+      freeEvent(event);
     }
   }
 }
