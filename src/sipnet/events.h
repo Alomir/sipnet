@@ -131,26 +131,6 @@ void appendLog(EventNode *event, int numParams, ...);
 void writeEventsOut(void);
 
 /*!
- * \brief Write a line to the event output file for a computed event
- *
- * Write an event that is computed internally, such as leaf on/leaf off or
- * plant death events.
- *
- * Output format:
- *
- * year day event_type \<param_name>=\<delta>[,\<param_name>=\<delta>,...]
- *
- * \param year Year of event
- * \param day  Day of event
- * \param type Type of event
- * \param numParams Number of param/value PAIRS to write
- * \param ...       Pairs of (char*, double) arguments to write, 2*numParams
- *                  values
- */
-void writeComputedEventOut(int year, int day, const char *type, int numParams,
-                           ...);
-
-/*!
  * Close the event output file
  */
 void closeEventOutFile(void);
@@ -229,7 +209,6 @@ typedef struct HarvestTrackersStruct {
   double totalFracRemovedBelow;
   double totalFracTransferredAbove;
   double totalFracTransferredBelow;
-  double leafCAdjustment;
   int harvestOccurred;
 } HarvestTrackers;
 
@@ -252,7 +231,7 @@ typedef struct EventTrackerStruct {
   int plantDeathOccurred;
   // These two params are recorded since they are the pool checks for mortality;
   // we will also use totalFracRemoved and totalFracTransferred from the
-  // harvestTracker
+  // harvestTracker, but don't need them here as they are already recorded.
   double totalWoodC;
   double totalRootC;
 } EventTrackers;
@@ -278,6 +257,11 @@ extern EventTrackers eventTrackers;
  * Initialize EventTrackers struct for tracking lingering event effects
  */
 void initEventTrackers(void);
+
+/*!
+ * Reset per-time-step event tracker fields
+ */
+void resetEventTrackers(void);
 
 /*!
  * Perform any needed updates post fluxes-and-pools updates

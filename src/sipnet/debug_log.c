@@ -12,19 +12,22 @@
 #include "state.h"
 
 #define NUM_LOGGED_ENVI_FIELDS 13
-#define NUM_LOGGED_FLUX_FIELDS 62
+#define NUM_LOGGED_FLUX_FIELDS 54
 #define NUM_LOGGED_TRACKER_FIELDS 32
 #define NUM_LOGGED_PHEN_TRACKER_FIELDS 3
 #define NUM_LOGGED_SURVIVAL_FIELDS 1
-#define NUM_LOGGED_EVENT_TRACKER_FIELDS 8
+#define NUM_LOGGED_EVENT_TRACKER_FIELDS 13
+#define NUM_LOGGED_PENDING_EVENT_FIELDS 16
 
+// Some structs are not all doubles, but the int(s) get padded to 8 bytes if
+// there is a mix
 #define DEBUG_LAYOUT_ENVI_SIZE (8 * NUM_LOGGED_ENVI_FIELDS)
 #define DEBUG_LAYOUT_FLUX_SIZE (8 * NUM_LOGGED_FLUX_FIELDS)
-// The Trackers struct is not all doubles, but the int(s) get padded to 8 bytes
 #define DEBUG_LAYOUT_TRACKER_SIZE (8 * NUM_LOGGED_TRACKER_FIELDS)
 #define DEBUG_LAYOUT_PHEN_SIZE (4 * NUM_LOGGED_PHEN_TRACKER_FIELDS)
 #define DEBUG_LAYOUT_SURVIVAL_SIZE (4 * NUM_LOGGED_SURVIVAL_FIELDS)
 #define DEBUG_LAYOUT_EVENT_SIZE (8 * NUM_LOGGED_EVENT_TRACKER_FIELDS)
+#define DEBUG_LAYOUT_PENDING_EVENT_SIZE (8 * NUM_LOGGED_PENDING_EVENT_FIELDS)
 
 _Static_assert(sizeof(Envi) == DEBUG_LAYOUT_ENVI_SIZE,
                "Debug log schema drift: Envi changed; update debug_log.c");
@@ -41,6 +44,9 @@ _Static_assert(
 _Static_assert(
     sizeof(EventTrackers) == DEBUG_LAYOUT_EVENT_SIZE,
     "Debug log schema drift: EventTrackers changed; update debug_log.c");
+_Static_assert(
+    sizeof(PendingEvents) == DEBUG_LAYOUT_PENDING_EVENT_SIZE,
+    "Debug log schema drift: PendingEvents changed; update debug_log.c");
 
 typedef enum DebugFieldType {
   DEBUG_FIELD_INT = 0,
@@ -60,6 +66,7 @@ typedef struct DebugFieldArrays {
   DebugField phenoDF[NUM_LOGGED_PHEN_TRACKER_FIELDS];
   DebugField survivalDF[NUM_LOGGED_SURVIVAL_FIELDS];
   DebugField eventDF[NUM_LOGGED_EVENT_TRACKER_FIELDS];
+  DebugField pendingDF[NUM_LOGGED_PENDING_EVENT_FIELDS];
 } DebugFieldArrays;
 
 static DebugFieldArrays *debugFields = NULL;
@@ -120,9 +127,6 @@ void initDebugArrays() {
   debugFields->fluxDF[ind++] = (DebugField){"rFineRoot", DEBUG_FIELD_DOUBLE, &fluxes.rFineRoot},
   debugFields->fluxDF[ind++] = (DebugField){"leafCreation", DEBUG_FIELD_DOUBLE, &fluxes.leafCreation},
   debugFields->fluxDF[ind++] = (DebugField){"woodCreation", DEBUG_FIELD_DOUBLE, &fluxes.woodCreation},
-  debugFields->fluxDF[ind++] = (DebugField){"leafOnCreation", DEBUG_FIELD_DOUBLE, &fluxes.leafOnCreation},
-  debugFields->fluxDF[ind++] = (DebugField){"leafOnCreationFromWood", DEBUG_FIELD_DOUBLE, &fluxes.leafOnCreationFromWood},
-  debugFields->fluxDF[ind++] = (DebugField){"leafOffLitter", DEBUG_FIELD_DOUBLE, &fluxes.leafOffLitter},
   debugFields->fluxDF[ind++] = (DebugField){"nVolatilization", DEBUG_FIELD_DOUBLE, &fluxes.nVolatilization},
   debugFields->fluxDF[ind++] = (DebugField){"nLeaching", DEBUG_FIELD_DOUBLE, &fluxes.nLeaching},
   debugFields->fluxDF[ind++] = (DebugField){"nOrgSoil", DEBUG_FIELD_DOUBLE, &fluxes.nOrgSoil},
@@ -148,11 +152,6 @@ void initDebugArrays() {
   debugFields->fluxDF[ind++] = (DebugField){"eventOutputC", DEBUG_FIELD_DOUBLE, &fluxes.eventOutputC},
   debugFields->fluxDF[ind++] = (DebugField){"eventInputN", DEBUG_FIELD_DOUBLE, &fluxes.eventInputN},
   debugFields->fluxDF[ind++] = (DebugField){"eventOutputN", DEBUG_FIELD_DOUBLE, &fluxes.eventOutputN},
-  debugFields->fluxDF[ind++] = (DebugField){"eventLeafOnCreation", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafOnCreation},
-  debugFields->fluxDF[ind++] = (DebugField){"eventLeafOnCreationFromWood", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafOnCreationFromWood},
-  debugFields->fluxDF[ind++] = (DebugField){"eventLeafOffLitterC", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafOffLitterC},
-  debugFields->fluxDF[ind++] = (DebugField){"eventLeafOffLitterN", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafOffLitterN},
-  debugFields->fluxDF[ind++] = (DebugField){"eventLeafOffNResorption", DEBUG_FIELD_DOUBLE, &fluxes.eventLeafOffNResorption},
   debugFields->fluxDF[ind++] = (DebugField){"soilMethane", DEBUG_FIELD_DOUBLE, &fluxes.soilMethane},
   debugFields->fluxDF[ind++] = (DebugField){"litterMethane", DEBUG_FIELD_DOUBLE, &fluxes.litterMethane};
   // These should be temporary, until we change how/where leaf-on/off and
@@ -227,9 +226,36 @@ void initDebugArrays() {
   debugFields->eventDF[ind++] = (DebugField){"ht.totalFracRemovedBelow", DEBUG_FIELD_DOUBLE, &eventTrackers.harvestTrackers.totalFracRemovedBelow};
   debugFields->eventDF[ind++] = (DebugField){"ht.totalFracTransferredAbove", DEBUG_FIELD_DOUBLE, &eventTrackers.harvestTrackers.totalFracTransferredAbove};
   debugFields->eventDF[ind++] = (DebugField){"ht.totalFracTransferredBelow", DEBUG_FIELD_DOUBLE, &eventTrackers.harvestTrackers.totalFracTransferredBelow};
-  debugFields->eventDF[ind++] = (DebugField){"ht.leafCAdjustment", DEBUG_FIELD_DOUBLE, &eventTrackers.harvestTrackers.leafCAdjustment};
+  debugFields->eventDF[ind++] = (DebugField){"ht.harvestOccurred", DEBUG_FIELD_INT, &eventTrackers.harvestTrackers.harvestOccurred};
+  debugFields->eventDF[ind++] = (DebugField){"totalLeafOnAmount", DEBUG_FIELD_DOUBLE, &eventTrackers.totalLeafOnAmount};
+  debugFields->eventDF[ind++] = (DebugField){"totalLeafOffFraction", DEBUG_FIELD_DOUBLE, &eventTrackers.totalLeafOffFraction};
+  debugFields->eventDF[ind++] = (DebugField){"plantDeathOccurred", DEBUG_FIELD_INT, &eventTrackers.plantDeathOccurred};
+  debugFields->eventDF[ind++] = (DebugField){"totalWoodC", DEBUG_FIELD_DOUBLE, &eventTrackers.totalWoodC};
+  debugFields->eventDF[ind++] = (DebugField){"totalRootC", DEBUG_FIELD_DOUBLE, &eventTrackers.totalRootC};
   if (ind != NUM_LOGGED_EVENT_TRACKER_FIELDS) {
     logInternalError("Debug log array size mismatch: eventDF\n");
+    exit(EXIT_CODE_INTERNAL_ERROR);
+  }
+
+  ind = 0;
+  debugFields->pendingDF[ind++] = (DebugField){"leafOnCreation", DEBUG_FIELD_DOUBLE, &pendingEvents.leafOnCreation};
+  debugFields->pendingDF[ind++] = (DebugField){"leafOnCreationFromWood", DEBUG_FIELD_DOUBLE, &pendingEvents.leafOnCreationFromWood};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestLeafC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestLeafC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestWoodC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestWoodC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestAccountingC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestAccountingC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestFineRootC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestFineRootC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestCoarseRootC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestCoarseRootC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestLitterC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestLitterC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestSoilC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestSoilC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestLitterN", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestLitterN};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestSoilN", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestSoilN};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestOutputC", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestOutputC};
+  debugFields->pendingDF[ind++] = (DebugField){"harvestOutputN", DEBUG_FIELD_DOUBLE, &pendingEvents.harvestOutputN};
+  debugFields->pendingDF[ind++] = (DebugField){"leafOffCTransfer", DEBUG_FIELD_DOUBLE, &pendingEvents.leafOffCTransfer};
+  debugFields->pendingDF[ind++] = (DebugField){"leafOffNResorption", DEBUG_FIELD_DOUBLE, &pendingEvents.leafOffNResorption};
+  debugFields->pendingDF[ind++] = (DebugField){"leafOffNTransfer", DEBUG_FIELD_DOUBLE, &pendingEvents.leafOffNTransfer};
+  if (ind != NUM_LOGGED_PENDING_EVENT_FIELDS) {
+    logInternalError("Debug log array size mismatch: pendingDF\n");
     exit(EXIT_CODE_INTERNAL_ERROR);
   }
   // clang-format on

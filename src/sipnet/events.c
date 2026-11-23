@@ -418,6 +418,8 @@ void openEventOutFile(const char *eventOutFilePath, int printHeader) {
   }
 }
 
+// TODO (consider): remove the variadic nature, just one p-v pair as input
+//   would require multiple calls, but might be worth removing this complexity
 void appendLog(EventNode *event, int numParams, ...) {
   va_list args;
   va_start(args, numParams);
@@ -457,8 +459,7 @@ void logPendingLeafOffEvent(EventNode *event) {
 
 void logPendingHarvestEvent(EventNode *event) {
   // clang-format off
-  appendLog(
-      event, 8,
+  appendLog(event, 8,
       "soilC", pendingEvents.harvestSoilC,
       "litterC", pendingEvents.harvestLitterC,
       "leafC", pendingEvents.harvestLeafC,
@@ -468,8 +469,7 @@ void logPendingHarvestEvent(EventNode *event) {
       "coarseRootC", pendingEvents.harvestCoarseRootC,
       "outputC", pendingEvents.harvestOutputC);
   if (ctx.nitrogenCycle) {
-    appendLog(
-        event, 3,
+    appendLog(event, 3,
         "soilOrgN", pendingEvents.harvestSoilN,
         "litterN", pendingEvents.harvestLitterN,
         "outputN", pendingEvents.harvestOutputN);
@@ -589,24 +589,6 @@ void writeEventsOut(void) {
   }
 }
 
-void writeComputedEventOut(int year, int day, const char *type, int numParams,
-                           ...) {
-  va_list args;
-  va_start(args, numParams);
-  // Standard prefix for all
-  fprintf(eventOutFile, "%4d  %3d  %-7s  ", year, day, type);
-
-  // Variable output per oneEvent type
-  for (int ind = 0; ind < numParams; ind++) {
-    char *param = va_arg(args, char *);
-    double val = va_arg(args, double);
-    char suffix = (ind == numParams - 1) ? '\n' : ',';
-    fprintf(eventOutFile, "%s=%-.2f%c", param, val, suffix);
-  }
-
-  va_end(args);
-}
-
 void closeEventOutFile() {
   if (eventOutFile) {
     fclose(eventOutFile);
@@ -656,10 +638,8 @@ void processEventsForCarbon(EventNode *event) {
     exit(EXIT_CODE_BAD_PARAMETER_VALUE);
   }
 
-  // Reset harvest tracking
-  eventTrackers.harvestTrackers = (HarvestTrackers){0};
-  eventTrackers.totalLeafOnAmount = 0.0;
-  eventTrackers.totalLeafOffFraction = 0.0;
+  // Reset event tracking that should be reset
+  resetEventTrackers();
 
   // If we see more than one of these, log that we are combining them
   int hasSeenLeafOn = 0;
@@ -701,8 +681,11 @@ void processEventsForCarbon(EventNode *event) {
         fluxes.eventEvap += evapAmount / climLen;
         fluxes.eventSoilWater += soilAmount / climLen;
 
-        appendLog(event, 2, "eventSoilWater", soilAmount, "eventEvap",
-                  evapAmount);
+        // clang-format off
+        appendLog(event, 2,
+          "eventSoilWater", soilAmount,
+          "eventEvap", evapAmount);
+        // clang-format on
 
       } break;
       case PLANTING: {
@@ -727,11 +710,11 @@ void processEventsForCarbon(EventNode *event) {
 
         // clang-format off
         appendLog(event, 5,
-                      "eventLeafC", leafC,
-                      "eventWoodC", woodC,
-                      "eventFineRootC", fineRootC,
-                      "eventCoarseRootC", coarseRootC,
-                      "eventInputC", inputC);
+          "eventLeafC", leafC,
+          "eventWoodC", woodC,
+          "eventFineRootC", fineRootC,
+          "eventCoarseRootC", coarseRootC,
+          "eventInputC", inputC);
         // clang-format on
 
       } break;
@@ -797,8 +780,10 @@ void processEventsForCarbon(EventNode *event) {
         // as there may be lingering effects from a prior tillage.
         eventTrackers.d_till_mod += tillParams->tillageEffect;
 
-        appendLog(event, 1, "eventTrackers.d_till_mod",
-                  tillParams->tillageEffect);
+        // clang-format off
+        appendLog(event, 1,
+          "eventTrackers.d_till_mod", tillParams->tillageEffect);
+        // clang-format on
 
       } break;
       case FERTILIZATION: {
@@ -854,7 +839,7 @@ void processEventsForCarbon(EventNode *event) {
 
       } break;
       case PLANTDEATH: {
-        logError("PLANTDEATH events are not supported as input events\n");
+        logError("Plant death events are not supported as input events\n");
         exit(EXIT_CODE_INPUT_FILE_ERROR);
       } break;
       default:
@@ -904,7 +889,10 @@ void processEventsForNitrogen(EventNode *event) {
                         coarseRootC / params.woodCN;
         fluxes.eventInputN += inputN / climLen;
 
-        appendLog(event, 1, "eventInputN", inputN);
+        // clang-format off
+        appendLog(event, 1,
+          "eventInputN", inputN);
+        // clang-format on
       } break;
       case HARVEST:
       case TILLAGE: {
@@ -1137,7 +1125,17 @@ void freeEventList(void) {
 // Definition of global event trackers struct
 EventTrackers eventTrackers;
 
-void initEventTrackers(void) { eventTrackers.d_till_mod = 0.0; }
+void resetEventTrackers(void) {
+  // Perhaps weird, but we won't miss new field entries this way
+  double tempTillMod = eventTrackers.d_till_mod;
+  eventTrackers = (EventTrackers){0};
+  eventTrackers.d_till_mod = tempTillMod;
+}
+
+void initEventTrackers(void) {
+  eventTrackers.d_till_mod = 0.0;
+  resetEventTrackers();
+}
 
 void updateEventTrackers(void) {
   const double climLen = climate->length;

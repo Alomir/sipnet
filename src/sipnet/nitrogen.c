@@ -208,7 +208,6 @@ void updateNitrogenPools(void) {
   // storage pool
   double nDemandFlux = calcPlantNDemandFlux();
   double storageDemandFlux = nDemandFlux - fluxes.nUptake - fluxes.nFixation;
-  // leaf-on; fluxes.eventLeafOnCreation is handled in events.c
   envi.plantStorageN +=
       (fluxes.reductionNResorption - storageDemandFlux) * climate->length;
 

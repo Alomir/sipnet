@@ -544,15 +544,6 @@ typedef struct FluxVars {
   // wood creation term, dependent on NPP similar to leaf creation, but
   // provenance TBD (g C * m^-2 ground area * day^-1)
   double woodCreation;
-  // creation from leaf-on event; separated from leafCreation for N balance (as
-  // we take this from the wood pool) (g C * m^-2 ground area * day^-1)
-  // double leafOnCreation; TODO: remove
-  // Portion of leaf-on creation C that comes from wood C (the rest comes from
-  // coarse root C)
-  // double leafOnCreationFromWood; TODO: remove
-  // leaf fall from calculated leaf off 'events' (gdd, soil temp, day of year)
-  // (g C * m^-2 grount area * day^-1)
-  //double leafOffLitter; TODO: remove
 
   // ****************************************
   // Fluxes for nitrogen cycle
@@ -639,17 +630,7 @@ typedef struct FluxVars {
   double eventOutputN;
 
   // LEAF ON/OFF FLUXES
-  // Transfer from woodC to leafC from a leaf-on event
-  double eventLeafOnCreation;
-  // Portion of leaf-on creation C that comes from wood C (the rest comes from
-  // coarse root C)
-  double eventLeafOnCreationFromWood;
-  // Transfer from leafC to soil/litter from a leaf-off event
-  //double eventLeafOffLitterC; TODO: remove
-  // Transfer from leafN to soil/litter from a leaf-off event
-  //double eventLeafOffLitterN; TODO: remove
-  // Resorption of leaf N from a leaf-off event
-  //double eventLeafOffNResorption; TODO: remove
+  // This is all handled in the PendingEvents struct
 
   // ****************************************
   // Methane production
@@ -664,12 +645,20 @@ typedef struct FluxVars {
 extern Fluxes fluxes;
 
 // Mostly for debugging, though these do make logging the pending events easier
+// Note that these values are not used in any calculations, they are for
+// reporting only.
 typedef struct PendingEventVars {
-  // leaf on
+  // LEAF ON
+  // creation from leaf-on event; separated from leafCreation for N balance (as
+  // we take this from the wood pool) (g C * m^-2 ground area)
   double leafOnCreation;
+  // Portion of leaf-on creation C that comes from wood C (the rest comes from
+  // coarse root C) (g C * m^-2 ground area)
   double leafOnCreationFromWood;
 
-  // harvest
+  // HARVEST
+  // Carbon removed from respective pools
+  // (g C * m^-2 ground area)
   double harvestLeafC;
   double harvestWoodC;
   double harvestAccountingC;
@@ -677,15 +666,25 @@ typedef struct PendingEventVars {
   double harvestCoarseRootC;
   double harvestLitterC;
   double harvestSoilC;
+  // Nitrogen removed from litter/soil pools
+  // (g N * m^-2 ground area)
   double harvestLitterN;
   double harvestSoilN;
+  // C/N removed from system via harvest  (g C/N * m^-2 ground area)
   double harvestOutputC;
   double harvestOutputN;
 
-  // leaf off
+  // LEAF OFF
+  // Transfer from leafC to soil/litter from a leaf-off event
+  // (g C * m^-2 grount area)
   double leafOffCTransfer;
+  // Resorption of leaf N from a leaf-off event
+  // (g N * m^-2 ground area * day^-1)
   double leafOffNResorption;
+  // Transfer from leafN to soil/litter from a leaf-off event
+  // (g N * m^-2 ground area * day^-1)
   double leafOffNTransfer;
+
 } PendingEvents;
 
 extern PendingEvents pendingEvents;

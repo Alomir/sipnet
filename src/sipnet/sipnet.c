@@ -1729,13 +1729,9 @@ void checkForMortality(void) {
     resetMeanTracker(meanNPP, 0.0);
 
     if (ctx.events) {
+      eventTrackers.plantDeathOccurred = 1;
       eventTrackers.totalWoodC = totalWoodC;
       eventTrackers.totalRootC = totalRootC;
-
-      EventNode *event = createEventNode(climate->year, climate->day,
-                            PLANTDEATH, "");
-      writeEvent(event);
-      freeEvent(event);
     }
   }
 }
