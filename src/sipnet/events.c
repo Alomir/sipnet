@@ -418,7 +418,7 @@ void openEventOutFile(const char *eventOutFilePath, int printHeader) {
   }
 }
 
-// TODO (consider): remove the variadic nature, just one p-v pair as input
+// TODO: [consider] remove the variadic nature, just one p-v pair as input
 //   would require multiple calls, but might be worth removing this complexity
 void appendLog(EventNode *event, int numParams, ...) {
   va_list args;

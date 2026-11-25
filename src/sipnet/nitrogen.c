@@ -28,13 +28,8 @@ static void calcNVolatilizationFlux(void) {
  * Calculate mineral N leaching flux
  */
 static void calcNLeachingFlux(void) {
-  double phi;
   // phi is (drainage / soilWHC) between 0 and 1
-  if ((fluxes.drainage / params.soilWHC) < 1) {
-    phi = fluxes.drainage / params.soilWHC;
-  } else {
-    phi = 1;
-  }
+  double phi = unitClip(fluxes.drainage / params.soilWHC);
   // flux = nMin * phi * leaching fraction, g N * m^-2 * day^-1
   fluxes.nLeaching = envi.minN * phi * params.nLeachingFrac;
 }
@@ -150,7 +145,7 @@ void calcNFixationAndUptakeFluxes(void) {
   double nDemandFlux = calcPlantNDemandFlux();
 
   // Calculate how much will be covered by the storage pool
-  double storageFlux = calcUnclaimedStorageN() / climate->length;
+  double storageFlux = envi.plantStorageN / climate->length;
 
   // Remaining demand for uptake/fixation
   double remDemandFlux = fmax(0.0, nDemandFlux - storageFlux);

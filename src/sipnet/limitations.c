@@ -85,13 +85,14 @@ static void checkNegativeCreation(void) {
   // (ie, <=1), availableLeafRate should be non-negative.
   double availableLeafRate = envi.plantLeafC / len - fluxes.leafLitter;
 
-  // Reminder: litter and creation fluxes "point" in the opposite direction, so
-  // their signs are opposite here
-  double deficit = fluxes.leafCreation - fluxes.eventLeafC - availableLeafRate;
+  // leafCreation will be negative if we are in negative growth; other two terms
+  // are positive (eventLeafC only gets set during planting). If leafCreation is
+  // bigger in magnitude, we must adjust.
+  double deficit = -(availableLeafRate + fluxes.eventLeafC + fluxes.leafCreation);
   // Move some negative growth to the wood pool
   if (deficit > 0) {
-    // If this is too much for the wood pool to handle, we have an error that
-    // will be caught in ensureNonNegative
+    // If this is too much for the wood pool to handle, the plant will die in
+    // checkForMortality()
     fluxes.woodCreation -= deficit;
     fluxes.leafCreation += deficit;
   }
