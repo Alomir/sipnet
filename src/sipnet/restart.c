@@ -34,10 +34,14 @@
 #define NUM_SCHEMA_FIELDS 5
 #define NUM_MEAN_META_FIELDS 5
 #define NUM_ENVI_FIELDS 13
-#define NUM_TRACKER_FIELDS 33
+#define NUM_TRACKER_FIELDS 32
 #define NUM_PHENOLOGY_TRACKERS_FIELDS 3
 #define NUM_SURVIVAL_TRACKERS_FIELDS 1
-#define NUM_EVENT_TRACKERS_FIELDS 8
+#define NUM_EVENT_TRACKERS_FIELDS 13
+// Note: flux and pending event structs are reset every time step, and do
+// not need to be serialized
+// This is almost true fpr event trackers, but d_till_mod needs to be stored,
+// so we just do all of it for ease of checking struct sizes
 
 // This one shouldn't change
 #define NUM_END_FIELDS 1
@@ -252,7 +256,6 @@ void initResetState(RestartState *state, MeanTracker *npp) {
   state->trackersPF[ind++] = (StateField){"trackers.yearlyRh",           FT_DOUBLE, &trackers.yearlyRh,           0};
   state->trackersPF[ind++] = (StateField){"trackers.yearlyNpp",          FT_DOUBLE, &trackers.yearlyNpp,          0};
   state->trackersPF[ind++] = (StateField){"trackers.yearlyNee",          FT_DOUBLE, &trackers.yearlyNee,          0};
-  state->trackersPF[ind++] = (StateField){"trackers.yearlyLitter",       FT_DOUBLE, &trackers.yearlyLitter,       0};
   state->trackersPF[ind++] = (StateField){"trackers.totGpp",             FT_DOUBLE, &trackers.totGpp,             0};
   state->trackersPF[ind++] = (StateField){"trackers.totRtot",            FT_DOUBLE, &trackers.totRtot,            0};
   state->trackersPF[ind++] = (StateField){"trackers.totRa",              FT_DOUBLE, &trackers.totRa,              0};
@@ -298,7 +301,12 @@ void initResetState(RestartState *state, MeanTracker *npp) {
   state->eventPF[ind++] = (StateField){"event_trackers.harvestTrackers.totalFracRemovedBelow",     FT_DOUBLE,  &eventTrackers.harvestTrackers.totalFracRemovedBelow,     0};
   state->eventPF[ind++] = (StateField){"event_trackers.harvestTrackers.totalFracTransferredAbove", FT_DOUBLE,  &eventTrackers.harvestTrackers.totalFracTransferredAbove, 0};
   state->eventPF[ind++] = (StateField){"event_trackers.harvestTrackers.totalFracTransferredBelow", FT_DOUBLE,  &eventTrackers.harvestTrackers.totalFracTransferredBelow, 0};
-  state->eventPF[ind++] = (StateField){"event_trackers.harvestTrackers.leafCAdjustment",           FT_DOUBLE,  &eventTrackers.harvestTrackers.leafCAdjustment,           0};
+  state->eventPF[ind++] = (StateField){"event_trackers.harvestTrackers.harvestOccurred",           FT_INT,     &eventTrackers.harvestTrackers.harvestOccurred,           0};
+  state->eventPF[ind++] = (StateField){"event_trackers.totalLeafOnAmount",                         FT_DOUBLE,  &eventTrackers.totalLeafOnAmount,                         0};
+  state->eventPF[ind++] = (StateField){"event_trackers.totalLeafOffFraction",                      FT_DOUBLE,  &eventTrackers.totalLeafOffFraction,                      0};
+  state->eventPF[ind++] = (StateField){"event_trackers.plantDeathOccurred",                        FT_INT,     &eventTrackers.plantDeathOccurred,                        0};
+  state->eventPF[ind++] = (StateField){"event_trackers.totalWoodC",                                FT_DOUBLE,  &eventTrackers.totalWoodC,                                0};
+  state->eventPF[ind++] = (StateField){"event_trackers.totalRootC",                                FT_DOUBLE,  &eventTrackers.totalRootC,                                0};
   state->eventPF[ind++] = (StateField){"event_trackers.invalid",                FT_INVALID, NULL, FIELD_INVALID};
   if (ind != NUM_EVENT_TRACKERS_FIELDS + 1) {
     logInternalError("Restart array size mismatch: eventPF\n");

@@ -43,11 +43,6 @@ double calcPlantAvailableN(void);
 double calcMinNNonUptakeFluxes(void);
 
 /**
- * Calculate how much of the plant storage N pool is not claimed by leaf-on
- */
-double calcUnclaimedStorageN(void);
-
-/**
  * Calculate the N fixation fraction taking inhibition into account
  *
  * @return N fixation fraction used to compute amount of N fixation
@@ -81,10 +76,9 @@ void calcNResorptionFluxes(void);
 /**
  * Helper function for handling leaf-off events
  *
- * This is used by both processEventsForNitrogen and the nitrogen limitation
- * check in limitations.
+ * This is used by processPendingEvents.
  */
-void calcLeafOffNEffects(double leafOffC, double *resorptionFlux,
-                         double *litterFlux);
+void calcLeafOffNEffects(double leafOffC, double *resorptionAmount,
+                         double *litterAmount);
 
 #endif  // NITROGEN_H
